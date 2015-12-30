@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">RebootTool</string>
+    <string name="reboot_times_info">Reboot Times: </string>
+    <string name="start_test">Start</string>
+    <string name="stop_test">Stop</string>
+    <string name="reboot_info">Total Times/Reboot Times: </string>
+    <string name="reboot_count_down">Reboot After </string>
+    <string name="device_is_not_root">Device is not root</string>
+</resources>
