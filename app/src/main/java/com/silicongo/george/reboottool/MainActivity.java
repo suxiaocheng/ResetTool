@@ -55,12 +55,11 @@ public class MainActivity extends AppCompatActivity {
         if (mBound == true) {
             mService.isCancel = true;
             unbindService(mConnection);
-            mService.stopService(mRebootIntent);
         }
 
         totalRebootTimes = Integer.valueOf(etRebootTimes.getText().toString());
-        if (totalRebootTimes < 5) {
-            totalRebootTimes = 5;
+        if (totalRebootTimes < 3) {
+            totalRebootTimes = 3;
         }
         currentRebootTimes = 0;
 
@@ -114,6 +113,7 @@ public class MainActivity extends AppCompatActivity {
 
         if (isBootOn == false) {
             if (currentRebootTimes >= totalRebootTimes) {
+                tvRebootInfo.setVisibility(View.VISIBLE);
                 tvRebootInfo.setText(getResources().getText(R.string.reboot_info).toString() +
                         totalRebootTimes + "/" + currentRebootTimes + ", Test PASS");
             } else {
@@ -146,6 +146,8 @@ public class MainActivity extends AppCompatActivity {
         totalRebootTimes = sharedPref.getInt(StringTotalRebootTimes, totalRebootTimes);
         currentRebootTimes = sharedPref.getInt(StringCurrentRebootTimes, currentRebootTimes);
 
+        registerReceiver(broadcastUpdateUIReceiver, new IntentFilter(RebootService.BROADCAST_UPDATE_UI));
+
         if (isRebootOn == true) {
             if (currentRebootTimes < totalRebootTimes) {
                 currentRebootTimes++;
@@ -165,8 +167,6 @@ public class MainActivity extends AppCompatActivity {
     public void onResume() {
         setUI(isRebootOn);
 
-        registerReceiver(broadcastUpdateUIReceiver, new IntentFilter(RebootService.BROADCAST_UPDATE_UI));
-
         if (mRebootIntent != null) {
             bindService(mRebootIntent, mConnection, Context.BIND_AUTO_CREATE);
         }
@@ -176,7 +176,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public void onPause() {
-        if (mBound) {
+        if (mRebootIntent != null) {
             unbindService(mConnection);
         }
         super.onPause();
@@ -185,6 +185,12 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onStop() {
         super.onStop();
+    }
+
+    @Override
+    public  void onDestroy(){
+        unregisterReceiver(broadcastUpdateUIReceiver);
+        super.onDestroy();
     }
 
     /**
@@ -222,6 +228,8 @@ public class MainActivity extends AppCompatActivity {
                     Toast.makeText(getBaseContext(), R.string.device_is_not_root, Toast.LENGTH_LONG);
                 } else {
                     CommandLine.execShell(new String[]{"su", "-c", "reboot"});
+                    Log.d(TAG, "Main Reboot Ok, Remain: " + currentRebootTimes + " Times");
+                    finish();
                 }
             }
         }

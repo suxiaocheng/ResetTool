@@ -77,13 +77,15 @@ public class RebootService extends IntentService {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-        } while (iRebootCount-- > 0);
+        } while (--iRebootCount > 0);
 
         if (isCancel == false) {
             Intent i = new Intent(BROADCAST_UPDATE_UI);
             i.putExtra(DOWNCOUNT, iRebootCount);
             sendBroadcast(i);
             Log.d(TAG, "Going to reboot...");
+
+            //CommandLine.execShell(new String[]{"su", "-c", "reboot"});
         }
     }
 
