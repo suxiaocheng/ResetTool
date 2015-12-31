@@ -1,10 +1,15 @@
 package com.silicongo.george.reboottool;
 
+import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
@@ -21,6 +26,12 @@ public class MainActivity extends AppCompatActivity {
     public static final String TAG = "MainActivity";
     public static final String ACTION_REBOOT = "android.intent.action.REBOOT";
     public static final String ACTION_REQUEST_SHUTDOWN = "android.intent.action.ACTION_REQUEST_SHUTDOWN";
+
+    /* Reboot service */
+    RebootService mService;
+    boolean mBound = false;
+    Intent mRebootIntent;
+
 
     @Bind(R.id.tvRebootTimesInfo)
     TextView tvRebootTimesInfo;
@@ -41,11 +52,10 @@ public class MainActivity extends AppCompatActivity {
     void startReboot() {
         isRebootOn = !isRebootOn;
 
-        if (rebootDownCountJob != null) {
-            if (rebootDownCountJob.getStatus() != AsyncTask.Status.FINISHED) {
-                rebootDownCountJob.cancel(true);
-            }
-            rebootDownCountJob = null;
+        if (mBound == true) {
+            mService.isCancel = true;
+            unbindService(mConnection);
+            mService.stopService(mRebootIntent);
         }
 
         totalRebootTimes = Integer.valueOf(etRebootTimes.getText().toString());
@@ -57,14 +67,12 @@ public class MainActivity extends AppCompatActivity {
         saveAll();
 
         if (isRebootOn) {
-            rebootDownCountJob = new RebootDownCountJob(5);
-            rebootDownCountJob.execute();
+            mRebootIntent = new Intent(this, RebootService.class);
+            startService(mRebootIntent);
+            bindService(mRebootIntent, mConnection, Context.BIND_AUTO_CREATE);
         }
         setUI(isRebootOn);
     }
-
-    private RebootDownCountJob rebootDownCountJob;
-    Object countDownLock = new Object();
 
     /* Global Var to store reboot status */
     private boolean isRebootOn = false;
@@ -133,36 +141,43 @@ public class MainActivity extends AppCompatActivity {
         ButterKnife.bind(this);
 
         sharedPref = getPreferences(Context.MODE_PRIVATE);
-    }
 
-    @Override
-    public void onResume() {
         isRebootOn = sharedPref.getBoolean(StringRebootOn, isRebootOn);
         totalRebootTimes = sharedPref.getInt(StringTotalRebootTimes, totalRebootTimes);
         currentRebootTimes = sharedPref.getInt(StringCurrentRebootTimes, currentRebootTimes);
 
-        setUI(isRebootOn);
-
-        if (isRebootOn) {
+        if (isRebootOn == true) {
             if (currentRebootTimes < totalRebootTimes) {
-                rebootDownCountJob = new RebootDownCountJob(5);
-                rebootDownCountJob.execute();
+                currentRebootTimes++;
+                saveCurrentRebootTimes();
+
+                mRebootIntent = new Intent(this, RebootService.class);
+                startService(mRebootIntent);
             } else {
                 isRebootOn = false;
                 setUI(isRebootOn);
                 saveAll();
             }
         }
+    }
+
+    @Override
+    public void onResume() {
+        setUI(isRebootOn);
+
+        registerReceiver(broadcastUpdateUIReceiver, new IntentFilter(RebootService.BROADCAST_UPDATE_UI));
+
+        if (mRebootIntent != null) {
+            bindService(mRebootIntent, mConnection, Context.BIND_AUTO_CREATE);
+        }
+
         super.onResume();
     }
 
     @Override
     public void onPause() {
-        if (rebootDownCountJob != null) {
-            if (rebootDownCountJob.getStatus() != AsyncTask.Status.FINISHED) {
-                rebootDownCountJob.cancel(true);
-            }
-            rebootDownCountJob = null;
+        if (mBound) {
+            unbindService(mConnection);
         }
         super.onPause();
     }
@@ -172,65 +187,44 @@ public class MainActivity extends AppCompatActivity {
         super.onStop();
     }
 
-    private class RebootDownCountJob extends AsyncTask<String, String, Void> {
-        private static final String TAG = "executeBackgroundCmd";
-        private int downCount;
+    /**
+     * Defines callbacks for service binding, passed to bindService()
+     */
+    private ServiceConnection mConnection = new ServiceConnection() {
 
-        public RebootDownCountJob(int val) {
-            downCount = val;
-            if (downCount <= 5) {
-                downCount = 5;
+        @Override
+        public void onServiceConnected(ComponentName className,
+                                       IBinder service) {
+            // We've bound to LocalService, cast the IBinder and get LocalService instance
+            RebootService.LocalBinder binder = (RebootService.LocalBinder) service;
+            mService = binder.getService();
+            mBound = true;
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName arg0) {
+            mBound = false;
+        }
+    };
+
+    private BroadcastReceiver broadcastUpdateUIReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            //Update Your UI here..
+            int count = (int)(intent.getExtras().get(RebootService.DOWNCOUNT));
+            if (tvCurrentRebootCountdown != null) {
+                tvCurrentRebootCountdown.setText(
+                        getResources().getText(R.string.reboot_count_down).toString() + ": " +
+                                count + " s");
             }
-            Log.d(TAG, "After " + downCount + " will reboot");
-
-            tvCurrentRebootCountdown.setVisibility(View.VISIBLE);
-        }
-
-        /**
-         * The system calls this to perform work in a worker thread and
-         * delivers it the parameters given to AsyncTask.execute()
-         */
-        protected Void doInBackground(String... urls) {
-            String val[] = new String[1];
-            do {
-                val[0] = Integer.toString(downCount);
-                publishProgress(val);
-                try {
-                    synchronized (countDownLock) {
-                        countDownLock.wait(1000);
-                    }
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-                if (isCancelled() == true) {
-                    break;
-                }
-            } while (downCount-- > 0);
-            return null;
-        }
-
-        protected void onPostExecute(Void result) {
-            if (currentRebootTimes < totalRebootTimes) {
-                currentRebootTimes++;
-
-                saveCurrentRebootTimes();
-
-                Log.d(TAG, "Going to reboot...");
+            if(count == 0) {
                 if (RootUtil.isDeviceRooted() == false) {
                     Toast.makeText(getBaseContext(), R.string.device_is_not_root, Toast.LENGTH_LONG);
                 } else {
                     CommandLine.execShell(new String[]{"su", "-c", "reboot"});
                 }
-                //finish();
             }
         }
+    };
 
-        protected void onCancelled() {
-            tvCurrentRebootCountdown.setVisibility(View.GONE);
-        }
-
-        protected void onProgressUpdate(String... progress) {
-            tvCurrentRebootCountdown.setText(getResources().getText(R.string.reboot_count_down).toString() + ": " + downCount + " s");
-        }
-    }
 }
