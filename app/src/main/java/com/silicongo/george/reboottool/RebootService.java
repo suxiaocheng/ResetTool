@@ -85,7 +85,11 @@ public class RebootService extends IntentService {
             sendBroadcast(i);
             Log.d(TAG, "Going to reboot...");
 
-            //CommandLine.execShell(new String[]{"su", "-c", "reboot"});
+            if (RootUtil.isDeviceRooted() == false) {
+                Toast.makeText(getBaseContext(), R.string.device_is_not_root, Toast.LENGTH_LONG);
+            } else {
+                CommandLine.execShell(new String[]{"su", "-c", "reboot"});
+            }
         }
     }
 

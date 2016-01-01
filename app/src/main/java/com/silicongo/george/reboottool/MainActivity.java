@@ -55,6 +55,7 @@ public class MainActivity extends AppCompatActivity {
         if (mBound == true) {
             mService.isCancel = true;
             unbindService(mConnection);
+            mRebootIntent = null;
         }
 
         totalRebootTimes = Integer.valueOf(etRebootTimes.getText().toString());
@@ -146,8 +147,6 @@ public class MainActivity extends AppCompatActivity {
         totalRebootTimes = sharedPref.getInt(StringTotalRebootTimes, totalRebootTimes);
         currentRebootTimes = sharedPref.getInt(StringCurrentRebootTimes, currentRebootTimes);
 
-        registerReceiver(broadcastUpdateUIReceiver, new IntentFilter(RebootService.BROADCAST_UPDATE_UI));
-
         if (isRebootOn == true) {
             if (currentRebootTimes < totalRebootTimes) {
                 currentRebootTimes++;
@@ -165,6 +164,9 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public void onResume() {
+
+        registerReceiver(broadcastUpdateUIReceiver, new IntentFilter(RebootService.BROADCAST_UPDATE_UI));
+
         setUI(isRebootOn);
 
         if (mRebootIntent != null) {
@@ -179,6 +181,7 @@ public class MainActivity extends AppCompatActivity {
         if (mRebootIntent != null) {
             unbindService(mConnection);
         }
+        unregisterReceiver(broadcastUpdateUIReceiver);
         super.onPause();
     }
 
@@ -189,7 +192,6 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public  void onDestroy(){
-        unregisterReceiver(broadcastUpdateUIReceiver);
         super.onDestroy();
     }
 
@@ -220,17 +222,10 @@ public class MainActivity extends AppCompatActivity {
             int count = (int)(intent.getExtras().get(RebootService.DOWNCOUNT));
             if (tvCurrentRebootCountdown != null) {
                 tvCurrentRebootCountdown.setText(
-                        getResources().getText(R.string.reboot_count_down).toString() + ": " +
-                                count + " s");
+                        getResources().getText(R.string.reboot_count_down).toString() + ": " + count + " s");
             }
             if(count == 0) {
-                if (RootUtil.isDeviceRooted() == false) {
-                    Toast.makeText(getBaseContext(), R.string.device_is_not_root, Toast.LENGTH_LONG);
-                } else {
-                    CommandLine.execShell(new String[]{"su", "-c", "reboot"});
-                    Log.d(TAG, "Main Reboot Ok, Remain: " + currentRebootTimes + " Times");
-                    finish();
-                }
+                Log.d(TAG, "Main Reboot Ok, Remain: " + currentRebootTimes + " Times");
             }
         }
     };
